@@ -2,6 +2,7 @@
 """
 Cloud RCA Analysis Tool using OpenAI GPT-4
 Analyzes Root Cause Analysis reports to identify patterns and improvement opportunities.
+Supports both text files and PDF files.
 """
 
 import openai
@@ -11,6 +12,14 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
+
+# PDF processing imports
+try:
+    import PyPDF2
+    import pdfplumber
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
 
 # Load environment variables
 load_dotenv()
@@ -54,21 +63,108 @@ class RCAAnalyzer:
             raise
 
     def load_rca_data(self, file_path="data.txt"):
-        """Load RCA data from file."""
+        """Load RCA data from file (supports .txt, .pdf)."""
         try:
-            with open(file_path, 'r', encoding='utf-8') as file:
-                content = file.read().strip()
+            file_path = Path(file_path)
+            
+            if not file_path.exists():
+                raise FileNotFoundError(f"RCA data file '{file_path}' not found. Please ensure the file exists.")
+            
+            # Determine file type and process accordingly
+            if file_path.suffix.lower() == '.pdf':
+                content = self._extract_text_from_pdf(file_path)
+            else:
+                # Handle as text file
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    content = file.read().strip()
             
             if not content:
-                raise ValueError("File is empty")
+                raise ValueError("File appears to be empty or no text could be extracted")
                 
             print(f"✅ Loaded RCA data from {file_path} ({len(content)} characters)")
             return content
             
-        except FileNotFoundError:
-            raise FileNotFoundError(f"RCA data file '{file_path}' not found. Please ensure the file exists.")
+        except FileNotFoundError as e:
+            raise e
         except Exception as e:
             raise Exception(f"Error loading RCA data: {e}")
+
+    def _extract_text_from_pdf(self, pdf_path):
+        """Extract text from PDF file using multiple methods for best results."""
+        if not PDF_SUPPORT:
+            raise Exception("PDF support not available. Please install: pip install PyPDF2 pdfplumber")
+        
+        print(f"📄 Extracting text from PDF: {pdf_path}")
+        
+        # Try pdfplumber first (better for complex layouts)
+        try:
+            text_content = self._extract_with_pdfplumber(pdf_path)
+            if text_content and len(text_content.strip()) > 100:
+                print("✅ Successfully extracted text using pdfplumber")
+                return text_content
+        except Exception as e:
+            print(f"⚠️  pdfplumber extraction failed: {e}")
+        
+        # Fallback to PyPDF2
+        try:
+            text_content = self._extract_with_pypdf2(pdf_path)
+            if text_content and len(text_content.strip()) > 100:
+                print("✅ Successfully extracted text using PyPDF2")
+                return text_content
+        except Exception as e:
+            print(f"⚠️  PyPDF2 extraction failed: {e}")
+        
+        raise Exception("Failed to extract readable text from PDF. The PDF might be image-based or corrupted.")
+    
+    def _extract_with_pdfplumber(self, pdf_path):
+        """Extract text using pdfplumber (better for tables and complex layouts)."""
+        text_content = []
+        
+        with pdfplumber.open(pdf_path) as pdf:
+            print(f"📖 Processing {len(pdf.pages)} pages with pdfplumber...")
+            
+            for page_num, page in enumerate(pdf.pages, 1):
+                try:
+                    # Extract text
+                    page_text = page.extract_text()
+                    
+                    if page_text:
+                        text_content.append(f"\n--- Page {page_num} ---\n")
+                        text_content.append(page_text)
+                    
+                    # Also try to extract tables if present
+                    tables = page.extract_tables()
+                    for table in tables:
+                        text_content.append(f"\n[TABLE on Page {page_num}]")
+                        for row in table:
+                            if row:
+                                text_content.append(" | ".join([cell or "" for cell in row]))
+                
+                except Exception as e:
+                    print(f"⚠️  Error processing page {page_num}: {e}")
+                    continue
+        
+        return "\n".join(text_content)
+    
+    def _extract_with_pypdf2(self, pdf_path):
+        """Extract text using PyPDF2 (fallback method)."""
+        text_content = []
+        
+        with open(pdf_path, 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            print(f"📖 Processing {len(pdf_reader.pages)} pages with PyPDF2...")
+            
+            for page_num, page in enumerate(pdf_reader.pages, 1):
+                try:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text_content.append(f"\n--- Page {page_num} ---\n")
+                        text_content.append(page_text)
+                except Exception as e:
+                    print(f"⚠️  Error processing page {page_num}: {e}")
+                    continue
+        
+        return "\n".join(text_content)
 
     def analyze_rcas(self, rca_data, max_tokens=4000, temperature=0.1):
         """Send RCA data to OpenAI for analysis."""
@@ -180,7 +276,8 @@ def main():
         epilog="""
 Examples:
   python rca_analyzer.py                          # Analyze data.txt with defaults
-  python rca_analyzer.py --input rcas.txt        # Analyze custom file
+  python rca_analyzer.py --input rcas.pdf        # Analyze PDF file
+  python rca_analyzer.py --input rcas.txt        # Analyze text file  
   python rca_analyzer.py --model gpt-4o           # Use GPT-4o model
   python rca_analyzer.py --prompt custom.txt     # Use custom prompt file
   python rca_analyzer.py --no-save               # Don't save output file
@@ -188,9 +285,10 @@ Examples:
     )
     
     parser.add_argument(
-        '--input', '-i',
+        'input', 
+        nargs='?',
         default='data.txt',
-        help='Input file containing RCA reports (default: data.txt)'
+        help='Path to RCA file (.txt, .pdf) - default: data.txt'
     )
     
     parser.add_argument(

@@ -53,13 +53,38 @@ pip install -r requirements.txt
 
 export OPENAI_API_KEY=***** (your_api_key_here)
 
-python3 rca_analyzer.py
+python rca_analyzer.py
 
 ## Use custom prompt file
-python3 rca_analyzer.py --prompt security_focused_prompt.txt
+python rca_analyzer.py --prompt security_focused_prompt.txt
 
 ## Full customization
-python3 rca_analyzer.py --input my_rcas.txt --prompt custom_prompt.txt --model gpt-4o
+python rca_analyzer.py --input my_rcas.txt --prompt custom_prompt.txt --model gpt-4o
+
+
+---
+# Analyze different file types
+python rca_analyzer.py my_rcas.pdf
+python rca_analyzer.py incidents.txt
+
+# Use custom prompt file
+python rca_analyzer.py data.pdf --prompt custom_prompt.txt
+
+# Use GPT-4o model
+python rca_analyzer.py --model gpt-4o
+
+# Save to specific output file
+python rca_analyzer.py data.pdf --output my_analysis.md
+
+# Don't save file, just display
+python rca_analyzer.py --no-save
+
+# Provide API key via command line
+python rca_analyzer.py --api-key your-key-here
+
+# Combine multiple options
+python rca_analyzer.py incidents.pdf --prompt prompt.txt --model gpt-4o --output analysis.md
+---
 
 
 ## Deactivate the environment (optional, when finished)
