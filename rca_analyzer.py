@@ -406,32 +406,92 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
             print(f"📄 Generating PDF report: {pdf_file}")
             
             # Create PDF document
-            doc = SimpleDocTemplate(pdf_file, pagesize=A4, topMargin=1*inch)
+            doc = SimpleDocTemplate(pdf_file, pagesize=A4, topMargin=1*inch, bottomMargin=1*inch)
             story = []
             
-            # Get styles
+            # Get styles and create custom ones
             styles = getSampleStyleSheet()
+            
+            # Enhanced styles for better hierarchy
             title_style = ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
-                fontSize=24,
-                spaceAfter=30,
+                fontSize=28,
+                spaceAfter=40,
+                spaceBefore=20,
                 alignment=TA_CENTER,
-                textColor=colors.darkblue
+                textColor=colors.darkblue,
+                fontName='Helvetica-Bold'
             )
             
-            heading_style = ParagraphStyle(
-                'CustomHeading',
+            h1_style = ParagraphStyle(
+                'CustomH1',
+                parent=styles['Heading1'],
+                fontSize=20,
+                spaceAfter=16,
+                spaceBefore=24,
+                textColor=colors.darkred,
+                fontName='Helvetica-Bold',
+                borderWidth=1,
+                borderColor=colors.darkred,
+                borderPadding=8
+            )
+            
+            h2_style = ParagraphStyle(
+                'CustomH2',
                 parent=styles['Heading2'], 
                 fontSize=16,
                 spaceAfter=12,
-                spaceBefore=12,
-                textColor=colors.darkred
+                spaceBefore=18,
+                textColor=colors.darkblue,
+                fontName='Helvetica-Bold'
+            )
+            
+            h3_style = ParagraphStyle(
+                'CustomH3',
+                parent=styles['Heading3'],
+                fontSize=14,
+                spaceAfter=10,
+                spaceBefore=14,
+                textColor=colors.darkgreen,
+                fontName='Helvetica-Bold'
+            )
+            
+            normal_style = ParagraphStyle(
+                'CustomNormal',
+                parent=styles['Normal'],
+                fontSize=11,
+                spaceAfter=8,
+                spaceBefore=0,
+                alignment=TA_JUSTIFY,
+                fontName='Helvetica'
+            )
+            
+            bullet_style = ParagraphStyle(
+                'CustomBullet',
+                parent=styles['Normal'],
+                fontSize=11,
+                spaceAfter=6,
+                spaceBefore=0,
+                leftIndent=20,
+                bulletIndent=0,
+                fontName='Helvetica'
+            )
+            
+            numbered_style = ParagraphStyle(
+                'CustomNumbered',
+                parent=styles['Normal'],
+                fontSize=11,
+                spaceAfter=6,
+                spaceBefore=0,
+                leftIndent=20,
+                bulletIndent=0,
+                fontName='Helvetica'
             )
             
             # Title page
             story.append(Paragraph("RCA Analysis Report", title_style))
-            story.append(Spacer(1, 20))
+            story.append(Spacer(1, 30))
             
             # Report metadata
             metadata = f"""
@@ -439,7 +499,7 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
             <b>Model:</b> {self.model}<br/>
             <b>Analysis Type:</b> Cloud Infrastructure RCA Pattern Analysis<br/>
             """
-            story.append(Paragraph(metadata, styles['Normal']))
+            story.append(Paragraph(metadata, normal_style))
             story.append(Spacer(1, 30))
             
             # Generate and embed Root Cause Classification chart
@@ -447,13 +507,13 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
             if chart_data:
                 chart_image = self._create_classification_chart(chart_data)
                 if chart_image:
-                    story.append(Paragraph("Root Cause Classification", heading_style))
+                    story.append(Paragraph("Root Cause Classification", h1_style))
                     story.append(Spacer(1, 12))
                     story.append(chart_image)
                     story.append(Spacer(1, 20))
                     
                     # Add data table
-                    story.append(Paragraph("Classification Data Table", heading_style))
+                    story.append(Paragraph("Classification Data Table", h2_style))
                     table_data = [['Category', 'Percentage', 'Incident Count']]
                     for item in chart_data:
                         table_data.append([
@@ -462,69 +522,24 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
                             str(item['Incident_Count'])
                         ])
                     
-                    table = Table(table_data)
+                    table = Table(table_data, colWidths=[3*inch, 1.5*inch, 1.5*inch])
                     table.setStyle(TableStyle([
-                        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                        ('FONTSIZE', (0, 0), (-1, 0), 14),
+                        ('FONTSIZE', (0, 0), (-1, 0), 12),
                         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                        ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
+                        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                        ('FONTSIZE', (0, 1), (-1, -1), 10)
                     ]))
                     story.append(table)
                     story.append(PageBreak())
             
-            # Add full analysis content
-            story.append(Paragraph("Complete Analysis", heading_style))
-            story.append(Spacer(1, 12))
-            
-            # Convert markdown-style headers to PDF paragraphs
-            sections = analysis.split('\n## ')
-            for i, section in enumerate(sections):
-                if i == 0:
-                    # First section might not have ## prefix
-                    if section.startswith('## '):
-                        section = section[3:]
-                else:
-                    # Add back the ## we split on
-                    section = '## ' + section
-                
-                lines = section.split('\n')
-                if lines[0].startswith('## '):
-                    # This is a section header
-                    header_text = lines[0][3:].strip()  # Remove ##
-                    story.append(Spacer(1, 12))
-                    story.append(Paragraph(header_text, heading_style))
-                    
-                    # Add section content
-                    content = '\n'.join(lines[1:]).strip()
-                    if content:
-                        # Convert **bold** to HTML
-                        content = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', content)
-                        # Convert bullet points
-                        content = re.sub(r'^[-*]\s+', '• ', content, flags=re.MULTILINE)
-                        
-                        paragraphs = content.split('\n\n')
-                        for para in paragraphs:
-                            if para.strip():
-                                story.append(Paragraph(para.strip(), styles['Normal']))
-                                story.append(Spacer(1, 6))
-                else:
-                    # First section without header
-                    content = '\n'.join(lines).strip()
-                    if content:
-                        # Convert **bold** to HTML
-                        content = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', content)
-                        # Convert bullet points
-                        content = re.sub(r'^[-*]\s+', '• ', content, flags=re.MULTILINE)
-                        
-                        paragraphs = content.split('\n\n')
-                        for para in paragraphs:
-                            if para.strip():
-                                story.append(Paragraph(para.strip(), styles['Normal']))
-                                story.append(Spacer(1, 6))
+            # Process the analysis content with improved markdown parsing
+            story.extend(self._parse_markdown_content(analysis, h1_style, h2_style, h3_style, normal_style, bullet_style, numbered_style))
             
             # Build PDF
             doc.build(story)
@@ -534,6 +549,106 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
         except Exception as e:
             print(f"❌ Error generating PDF: {e}")
             return False
+
+    def _parse_markdown_content(self, analysis, h1_style, h2_style, h3_style, normal_style, bullet_style, numbered_style):
+        """Parse markdown content and convert to PDF elements with proper formatting."""
+        story = []
+        lines = analysis.split('\n')
+        i = 0
+        
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # Skip empty lines
+            if not line:
+                i += 1
+                continue
+            
+            # Handle headers (# ## ###)
+            if line.startswith('#'):
+                header_level = len(line) - len(line.lstrip('#'))
+                header_text = line.lstrip('#').strip()
+                
+                if header_level == 1:
+                    story.append(Spacer(1, 20))
+                    story.append(Paragraph(header_text, h1_style))
+                elif header_level == 2:
+                    story.append(Spacer(1, 16))
+                    story.append(Paragraph(header_text, h2_style))
+                elif header_level >= 3:
+                    story.append(Spacer(1, 12))
+                    story.append(Paragraph(header_text, h3_style))
+                
+                i += 1
+                continue
+            
+            # Handle numbered lists (1. 2. etc.)
+            numbered_match = re.match(r'^(\d+)\.\s+(.+)', line)
+            if numbered_match:
+                number, text = numbered_match.groups()
+                # Process multi-line numbered items
+                full_text = text
+                i += 1
+                while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\.', lines[i].strip()):
+                    full_text += ' ' + lines[i].strip()
+                    i += 1
+                
+                # Format the text
+                formatted_text = self._format_text_content(full_text)
+                story.append(Paragraph(f"{number}. {formatted_text}", numbered_style))
+                continue
+            
+            # Handle bullet points (- or *)
+            if line.startswith(('-', '*')):
+                bullet_text = line[1:].strip()
+                # Process multi-line bullet items
+                full_text = bullet_text
+                i += 1
+                while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\.', lines[i].strip()):
+                    full_text += ' ' + lines[i].strip()
+                    i += 1
+                
+                # Format the text
+                formatted_text = self._format_text_content(full_text)
+                story.append(Paragraph(f"• {formatted_text}", bullet_style))
+                continue
+            
+            # Handle regular paragraphs
+            paragraph_text = line
+            i += 1
+            # Collect multi-line paragraphs
+            while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\.', lines[i].strip()):
+                paragraph_text += ' ' + lines[i].strip()
+                i += 1
+            
+            if paragraph_text:
+                formatted_text = self._format_text_content(paragraph_text)
+                story.append(Paragraph(formatted_text, normal_style))
+        
+        return story
+    
+    def _format_text_content(self, text):
+        """Format text content with bold, italic, and other markdown elements."""
+        if not text:
+            return ""
+        
+        # Convert **bold** to HTML
+        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+        
+        # Convert *italic* to HTML (but not ** which is already converted)
+        text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'<i>\1</i>', text)
+        
+        # Convert `code` to HTML
+        text = re.sub(r'`([^`]+)`', r'<font name="Courier"><b>\1</b></font>', text)
+        
+        # Handle percentages and numbers to make them stand out
+        text = re.sub(r'(\d+%)', r'<b>\1</b>', text)
+        text = re.sub(r'(\d+\s+incidents?)', r'<b>\1</b>', text)
+        
+        # Clean up any remaining markdown artifacts
+        text = text.replace('###', '').replace('##', '').replace('#', '')
+        
+        return text
 
     def _create_classification_chart(self, data):
         """Create a pie chart for root cause classification."""
