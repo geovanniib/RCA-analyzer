@@ -130,7 +130,7 @@ class RCAAnalyzer:
         """Save analysis results to file."""
         if not output_file:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_file = f"rca_analysis_{timestamp}.md"
+            output_file = f"output/rca_analysis_{timestamp}.md"
         
         try:
             with open(output_file, 'w', encoding='utf-8') as file:
