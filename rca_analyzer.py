@@ -21,6 +21,24 @@ try:
 except ImportError:
     PDF_SUPPORT = False
 
+# PDF generation and visualization imports
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    import pandas as pd
+    import seaborn as sns
+    import io
+    import re
+    VISUALIZATION_SUPPORT = True
+except ImportError:
+    VISUALIZATION_SUPPORT = False
+
 # Load environment variables
 load_dotenv()
 
@@ -45,6 +63,15 @@ class RCAAnalyzer:
     def _load_analysis_prompt(self, prompt_file="prompt.txt"):
         """Load the specialized RCA analysis prompt from file."""
         try:
+            prompt_path = Path(prompt_file)
+            if not prompt_path.exists():
+                # Create default prompt if file doesn't exist
+                default_prompt = self._create_default_prompt()
+                with open(prompt_file, 'w', encoding='utf-8') as file:
+                    file.write(default_prompt)
+                print(f"✅ Created default prompt file: {prompt_file}")
+                return default_prompt
+            
             with open(prompt_file, 'r', encoding='utf-8') as file:
                 prompt_content = file.read().strip()
             
@@ -54,13 +81,47 @@ class RCAAnalyzer:
             print(f"✅ Loaded analysis prompt from {prompt_file}")
             return prompt_content
             
-        except FileNotFoundError:
-            print(f"❌ Error: Prompt file '{prompt_file}' not found.")
-            print("Please ensure prompt.txt exists in the current directory.")
-            raise
         except Exception as e:
             print(f"❌ Error loading prompt: {e}")
-            raise
+            # Fallback to default prompt
+            print("🔄 Using default prompt instead")
+            return self._create_default_prompt()
+
+    def _create_default_prompt(self):
+        """Create a default RCA analysis prompt."""
+        return """You are a senior cloud reliability engineer specializing in Root Cause Analysis (RCA) and incident pattern recognition.
+
+Analyze the provided RCA reports and provide a comprehensive analysis including:
+
+1. **Executive Summary**
+   - Brief overview of the analysis scope
+   - Key findings and insights
+
+2. **Root Cause Classification**
+   - Categorize incidents by root cause type (Technical, Process, Human Error, Infrastructure, etc.)
+   - Provide percentages and incident counts for each category
+
+3. **Pattern Analysis**
+   - Identify recurring patterns across incidents
+   - Common failure modes and contributing factors
+   - Temporal patterns (time of day, day of week, etc.)
+
+4. **Impact Assessment**
+   - Severity distribution
+   - Service/system impact analysis
+   - Customer impact patterns
+
+5. **Improvement Recommendations**
+   - Specific actionable recommendations
+   - Prioritized by impact and feasibility
+   - Include preventive measures
+
+6. **Systemic Issues**
+   - Identify underlying systemic problems
+   - Process gaps or technical debt
+   - Organizational or cultural factors
+
+Provide specific, actionable insights based on the data. Use clear formatting with headers and bullet points."""
 
     def load_rca_data(self, file_path="data.txt"):
         """Load RCA data from file (supports .txt, .pdf)."""
@@ -222,13 +283,17 @@ class RCAAnalyzer:
             else:
                 raise Exception(f"Analysis failed: {e}")
 
-    def save_analysis(self, analysis, output_file=None):
-        """Save analysis results to file."""
+    def save_analysis(self, analysis, output_file=None, generate_pdf=False, generate_csv=False):
+        """Save analysis results to file with optional PDF and CSV outputs."""
         if not output_file:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_file = f"output/rca_analysis_{timestamp}.md"
+            output_file = f"rca_analysis_{timestamp}.md"
+        
+        base_name = Path(output_file).stem
+        outputs_created = []
         
         try:
+            # Save markdown file
             with open(output_file, 'w', encoding='utf-8') as file:
                 file.write(f"# RCA Analysis Report\n")
                 file.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -236,13 +301,292 @@ class RCAAnalyzer:
                 file.write(analysis)
             
             print(f"💾 Analysis saved to: {output_file}")
-            return output_file
+            outputs_created.append(output_file)
+            
+            # Generate CSV if requested
+            if generate_csv:
+                csv_file = f"{base_name}_data.csv"
+                if self._generate_csv_report(analysis, csv_file):
+                    outputs_created.append(csv_file)
+            
+            # Generate PDF if requested
+            if generate_pdf:
+                pdf_file = f"{base_name}_report.pdf"
+                if self._generate_pdf_report(analysis, pdf_file):
+                    outputs_created.append(pdf_file)
+            
+            return outputs_created
             
         except Exception as e:
             print(f"❌ Error saving analysis: {e}")
+            return []
+
+    def _generate_csv_report(self, analysis, csv_file):
+        """Generate CSV file with extracted data tables."""
+        try:
+            if not VISUALIZATION_SUPPORT:
+                print("⚠️  CSV generation requires pandas. Install with: pip install pandas")
+                return False
+            
+            print(f"📊 Generating CSV report: {csv_file}")
+            
+            # Extract Root Cause Classification data
+            classification_data = self._extract_classification_data(analysis)
+            
+            if not classification_data:
+                print("⚠️  No classification data found to export to CSV")
+                return False
+            
+            # Create DataFrame and save to CSV
+            df = pd.DataFrame(classification_data)
+            df.to_csv(csv_file, index=False)
+            
+            print(f"✅ CSV report saved: {csv_file}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error generating CSV: {e}")
+            return False
+
+    def _extract_classification_data(self, analysis):
+        """Extract structured data from the analysis text."""
+        data = []
+        
+        # Extract Root Cause Classification section
+        classification_pattern = r"Root Cause Classification:?\s*\n((?:[-*]\s*.*?:\s*\d+%.*?\n?)+)"
+        match = re.search(classification_pattern, analysis, re.MULTILINE | re.IGNORECASE)
+        
+        if match:
+            classification_text = match.group(1)
+            
+            # Parse individual classification items
+            item_pattern = r"[-*]\s*(.*?):\s*(\d+)%\s*\((\d+)\s*incidents?\)"
+            items = re.findall(item_pattern, classification_text)
+            
+            for category, percentage, count in items:
+                data.append({
+                    'Category': category.strip(),
+                    'Percentage': int(percentage),
+                    'Incident_Count': int(count)
+                })
+        
+        # If no structured data found, try alternative patterns
+        if not data:
+            # Try to extract from any percentage patterns in the text
+            percentage_pattern = r"(Technical|Process|Human|Infrastructure|Equipment).*?(\d+)%.*?(\d+)\s*incidents?"
+            matches = re.findall(percentage_pattern, analysis, re.IGNORECASE)
+            
+            for category, percentage, count in matches:
+                data.append({
+                    'Category': category.strip(),
+                    'Percentage': int(percentage),
+                    'Incident_Count': int(count)
+                })
+        
+        return data
+
+    def _generate_pdf_report(self, analysis, pdf_file):
+        """Generate comprehensive PDF report with embedded graphs."""
+        try:
+            if not VISUALIZATION_SUPPORT:
+                print("⚠️  PDF generation requires reportlab and matplotlib.")
+                print("Install with: pip install reportlab matplotlib pandas seaborn")
+                return False
+            
+            print(f"📄 Generating PDF report: {pdf_file}")
+            
+            # Create PDF document
+            doc = SimpleDocTemplate(pdf_file, pagesize=A4, topMargin=1*inch)
+            story = []
+            
+            # Get styles
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                spaceAfter=30,
+                alignment=TA_CENTER,
+                textColor=colors.darkblue
+            )
+            
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'], 
+                fontSize=16,
+                spaceAfter=12,
+                spaceBefore=12,
+                textColor=colors.darkred
+            )
+            
+            # Title page
+            story.append(Paragraph("RCA Analysis Report", title_style))
+            story.append(Spacer(1, 20))
+            
+            # Report metadata
+            metadata = f"""
+            <b>Generated:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br/>
+            <b>Model:</b> {self.model}<br/>
+            <b>Analysis Type:</b> Cloud Infrastructure RCA Pattern Analysis<br/>
+            """
+            story.append(Paragraph(metadata, styles['Normal']))
+            story.append(Spacer(1, 30))
+            
+            # Generate and embed Root Cause Classification chart
+            chart_data = self._extract_classification_data(analysis)
+            if chart_data:
+                chart_image = self._create_classification_chart(chart_data)
+                if chart_image:
+                    story.append(Paragraph("Root Cause Classification", heading_style))
+                    story.append(Spacer(1, 12))
+                    story.append(chart_image)
+                    story.append(Spacer(1, 20))
+                    
+                    # Add data table
+                    story.append(Paragraph("Classification Data Table", heading_style))
+                    table_data = [['Category', 'Percentage', 'Incident Count']]
+                    for item in chart_data:
+                        table_data.append([
+                            item['Category'], 
+                            f"{item['Percentage']}%", 
+                            str(item['Incident_Count'])
+                        ])
+                    
+                    table = Table(table_data)
+                    table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, 0), 14),
+                        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                    ]))
+                    story.append(table)
+                    story.append(PageBreak())
+            
+            # Add full analysis content
+            story.append(Paragraph("Complete Analysis", heading_style))
+            story.append(Spacer(1, 12))
+            
+            # Convert markdown-style headers to PDF paragraphs
+            sections = analysis.split('\n## ')
+            for i, section in enumerate(sections):
+                if i == 0:
+                    # First section might not have ## prefix
+                    if section.startswith('## '):
+                        section = section[3:]
+                else:
+                    # Add back the ## we split on
+                    section = '## ' + section
+                
+                lines = section.split('\n')
+                if lines[0].startswith('## '):
+                    # This is a section header
+                    header_text = lines[0][3:].strip()  # Remove ##
+                    story.append(Spacer(1, 12))
+                    story.append(Paragraph(header_text, heading_style))
+                    
+                    # Add section content
+                    content = '\n'.join(lines[1:]).strip()
+                    if content:
+                        # Convert **bold** to HTML
+                        content = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', content)
+                        # Convert bullet points
+                        content = re.sub(r'^[-*]\s+', '• ', content, flags=re.MULTILINE)
+                        
+                        paragraphs = content.split('\n\n')
+                        for para in paragraphs:
+                            if para.strip():
+                                story.append(Paragraph(para.strip(), styles['Normal']))
+                                story.append(Spacer(1, 6))
+                else:
+                    # First section without header
+                    content = '\n'.join(lines).strip()
+                    if content:
+                        # Convert **bold** to HTML
+                        content = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', content)
+                        # Convert bullet points
+                        content = re.sub(r'^[-*]\s+', '• ', content, flags=re.MULTILINE)
+                        
+                        paragraphs = content.split('\n\n')
+                        for para in paragraphs:
+                            if para.strip():
+                                story.append(Paragraph(para.strip(), styles['Normal']))
+                                story.append(Spacer(1, 6))
+            
+            # Build PDF
+            doc.build(story)
+            print(f"✅ PDF report saved: {pdf_file}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error generating PDF: {e}")
+            return False
+
+    def _create_classification_chart(self, data):
+        """Create a pie chart for root cause classification."""
+        try:
+            # Set up the plot with a clean style
+            plt.style.use('default')
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
+            
+            # Extract data for plotting
+            categories = [item['Category'] for item in data]
+            percentages = [item['Percentage'] for item in data]
+            counts = [item['Incident_Count'] for item in data]
+            
+            # Define colors
+            colors_palette = ['#FF9999', '#66B2FF', '#99FF99', '#FFCC99', '#FF99CC']
+            
+            # Create pie chart
+            wedges, texts, autotexts = ax1.pie(
+                percentages, 
+                labels=categories, 
+                autopct='%1.1f%%',
+                colors=colors_palette[:len(categories)],
+                startangle=90,
+                explode=[0.05] * len(categories)  # Slightly separate wedges
+            )
+            
+            ax1.set_title('Root Cause Distribution by Percentage', fontsize=14, fontweight='bold', pad=20)
+            
+            # Create bar chart for incident counts
+            bars = ax2.bar(categories, counts, color=colors_palette[:len(categories)], alpha=0.7)
+            ax2.set_title('Root Cause Distribution by Incident Count', fontsize=14, fontweight='bold', pad=20)
+            ax2.set_ylabel('Number of Incidents', fontweight='bold')
+            ax2.set_xlabel('Root Cause Category', fontweight='bold')
+            
+            # Add value labels on bars
+            for bar in bars:
+                height = bar.get_height()
+                ax2.text(bar.get_x() + bar.get_width()/2., height + 0.1,
+                        f'{int(height)}', ha='center', va='bottom', fontweight='bold')
+            
+            # Rotate x-axis labels if needed
+            plt.setp(ax2.get_xticklabels(), rotation=45, ha='right')
+            
+            # Adjust layout
+            plt.tight_layout()
+            
+            # Save to memory buffer
+            img_buffer = io.BytesIO()
+            plt.savefig(img_buffer, format='PNG', dpi=300, bbox_inches='tight')
+            img_buffer.seek(0)
+            plt.close()
+            
+            # Create ReportLab Image object
+            from reportlab.platypus import Image
+            chart_image = Image(img_buffer, width=6*inch, height=3*inch)
+            
+            return chart_image
+            
+        except Exception as e:
+            print(f"❌ Error creating chart: {e}")
             return None
 
-    def run_analysis(self, data_file="data.txt", output_file=None, save_results=True):
+    def run_analysis(self, data_file="data.txt", output_file=None, save_results=True, generate_pdf=False, generate_csv=False):
         """Run complete RCA analysis workflow."""
         try:
             # Load RCA data
@@ -253,7 +597,11 @@ class RCAAnalyzer:
             
             # Save results
             if save_results:
-                output_path = self.save_analysis(analysis, output_file)
+                outputs = self.save_analysis(analysis, output_file, generate_pdf, generate_csv)
+                if outputs:
+                    print(f"📁 Generated {len(outputs)} output files:")
+                    for output in outputs:
+                        print(f"   • {output}")
             
             # Display results
             print("\n" + "="*80)
@@ -275,12 +623,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python rca_analyzer.py                          # Analyze data.txt with defaults
-  python rca_analyzer.py --input rcas.pdf        # Analyze PDF file
-  python rca_analyzer.py --input rcas.txt        # Analyze text file  
-  python rca_analyzer.py --model gpt-4o           # Use GPT-4o model
-  python rca_analyzer.py --prompt custom.txt     # Use custom prompt file
-  python rca_analyzer.py --no-save               # Don't save output file
+  python rca_analyzer.py data.pdf                     # Basic analysis  
+  python rca_analyzer.py data.pdf --pdf               # Generate PDF report
+  python rca_analyzer.py data.pdf --csv               # Generate CSV data
+  python rca_analyzer.py data.pdf --all-formats       # Generate all formats
+  python rca_analyzer.py data.pdf --pdf --csv         # Generate PDF + CSV
+  python rca_analyzer.py --model gpt-4o --pdf         # Use GPT-4o with PDF
         """
     )
     
@@ -310,17 +658,40 @@ Examples:
     )
     
     parser.add_argument(
+        '--api-key',
+        help='OpenAI API key (can also use OPENAI_API_KEY env var)'
+    )
+    
+    parser.add_argument(
         '--no-save',
         action='store_true',
         help='Don\'t save analysis to file'
     )
     
     parser.add_argument(
-        '--api-key',
-        help='OpenAI API key (or set OPENAI_API_KEY env var)'
+        '--pdf',
+        action='store_true',
+        help='Generate PDF report with embedded graphs'
+    )
+    
+    parser.add_argument(
+        '--csv', 
+        action='store_true',
+        help='Generate CSV file with classification data'
+    )
+    
+    parser.add_argument(
+        '--all-formats',
+        action='store_true', 
+        help='Generate all output formats (markdown, PDF, CSV)'
     )
     
     args = parser.parse_args()
+    
+    # Handle --all-formats flag
+    if args.all_formats:
+        args.pdf = True
+        args.csv = True
     
     # Validate API key
     api_key = args.api_key or os.getenv('OPENAI_API_KEY')
@@ -343,7 +714,9 @@ Examples:
         result = analyzer.run_analysis(
             data_file=args.input,
             output_file=args.output,
-            save_results=not args.no_save
+            save_results=not args.no_save,
+            generate_pdf=args.pdf,
+            generate_csv=args.csv
         )
         
         if result:
