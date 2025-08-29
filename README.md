@@ -68,7 +68,7 @@ Examples:
   python rca_analyzer.py data/Incident_RCA_Summary.pdf --model gpt-4o --pdf                         # Use GPT-4o with PDF
   python rca_analyzer.py data/Incident_RCA_Summary.pdf --output-dir ./reports                       # Save to specific directory
   python rca_analyzer.py data/Incident_RCA_Summary.pdf --all-formats -d ./output                    # All formats to directory
-  python rca_analyzer.py --api-key your-key-here                                                    # Use api-key directly
+  python rca_analyzer.py --api-key=your-key-here                                                    # Use api-key directly
   python rca_analyzer.py data/RCA.pdf --prompt prompt.txt --model gpt-4o --output analysis.md       # Combine multiple options
   python rca_analyzer.py data/data.txt --prompt prompt.txt --model gpt-4o --output analysis.md      # TXT input
 
