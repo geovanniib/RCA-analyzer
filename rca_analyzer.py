@@ -283,13 +283,23 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
             else:
                 raise Exception(f"Analysis failed: {e}")
 
-    def save_analysis(self, analysis, output_file=None, generate_pdf=False, generate_csv=False):
+    def save_analysis(self, analysis, output_file=None, output_dir=None, generate_pdf=False, generate_csv=False):
         """Save analysis results to file with optional PDF and CSV outputs."""
         if not output_file:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_file = f"rca_analysis_{timestamp}.md"
         
-        base_name = Path(output_file).stem
+        # Handle output directory
+        if output_dir:
+            output_dir = Path(output_dir)
+            # Create directory if it doesn't exist
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_file = output_dir / Path(output_file).name
+            print(f"📁 Output directory: {output_dir}")
+        
+        output_file = Path(output_file)
+        base_name = output_file.stem
+        base_dir = output_file.parent
         outputs_created = []
         
         try:
@@ -301,19 +311,19 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
                 file.write(analysis)
             
             print(f"💾 Analysis saved to: {output_file}")
-            outputs_created.append(output_file)
+            outputs_created.append(str(output_file))
             
             # Generate CSV if requested
             if generate_csv:
-                csv_file = f"{base_name}_data.csv"
-                if self._generate_csv_report(analysis, csv_file):
-                    outputs_created.append(csv_file)
+                csv_file = base_dir / f"{base_name}_data.csv"
+                if self._generate_csv_report(analysis, str(csv_file)):
+                    outputs_created.append(str(csv_file))
             
             # Generate PDF if requested
             if generate_pdf:
-                pdf_file = f"{base_name}_report.pdf"
-                if self._generate_pdf_report(analysis, pdf_file):
-                    outputs_created.append(pdf_file)
+                pdf_file = base_dir / f"{base_name}_report.pdf"
+                if self._generate_pdf_report(analysis, str(pdf_file)):
+                    outputs_created.append(str(pdf_file))
             
             return outputs_created
             
@@ -586,7 +596,7 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
             print(f"❌ Error creating chart: {e}")
             return None
 
-    def run_analysis(self, data_file="data.txt", output_file=None, save_results=True, generate_pdf=False, generate_csv=False):
+    def run_analysis(self, data_file="data.txt", output_file=None, output_dir=None, save_results=True, generate_pdf=False, generate_csv=False):
         """Run complete RCA analysis workflow."""
         try:
             # Load RCA data
@@ -597,7 +607,7 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
             
             # Save results
             if save_results:
-                outputs = self.save_analysis(analysis, output_file, generate_pdf, generate_csv)
+                outputs = self.save_analysis(analysis, output_file, output_dir, generate_pdf, generate_csv)
                 if outputs:
                     print(f"📁 Generated {len(outputs)} output files:")
                     for output in outputs:
@@ -623,12 +633,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python rca_analyzer.py data.pdf                     # Basic analysis  
-  python rca_analyzer.py data.pdf --pdf               # Generate PDF report
-  python rca_analyzer.py data.pdf --csv               # Generate CSV data
-  python rca_analyzer.py data.pdf --all-formats       # Generate all formats
-  python rca_analyzer.py data.pdf --pdf --csv         # Generate PDF + CSV
-  python rca_analyzer.py --model gpt-4o --pdf         # Use GPT-4o with PDF
+  python rca_analyzer.py data.pdf                              # Basic analysis  
+  python rca_analyzer.py data.pdf --pdf                        # Generate PDF report
+  python rca_analyzer.py data.pdf --csv                        # Generate CSV data
+  python rca_analyzer.py data.pdf --all-formats                # Generate all formats
+  python rca_analyzer.py data.pdf --pdf --csv                  # Generate PDF + CSV
+  python rca_analyzer.py --model gpt-4o --pdf                  # Use GPT-4o with PDF
+  python rca_analyzer.py data.pdf --output-dir ./reports       # Save to specific directory
+  python rca_analyzer.py data.pdf --all-formats -d ./output    # All formats to directory
         """
     )
     
@@ -642,6 +654,11 @@ Examples:
     parser.add_argument(
         '--output', '-o',
         help='Output file for analysis results (default: auto-generated)'
+    )
+    
+    parser.add_argument(
+        '--output-dir', '-d',
+        help='Output directory for all generated files (default: current directory)'
     )
     
     parser.add_argument(
@@ -714,6 +731,7 @@ Examples:
         result = analyzer.run_analysis(
             data_file=args.input,
             output_file=args.output,
+            output_dir=args.output_dir,
             save_results=not args.no_save,
             generate_pdf=args.pdf,
             generate_csv=args.csv
