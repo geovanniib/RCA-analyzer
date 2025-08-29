@@ -51,6 +51,8 @@ pip install -r requirements.txt
 
 ## Basic usage (uses prompt.txt automatically)
 
+export OPENAI_API_KEY=***** (your_api_key_here)
+
 python3 rca_analyzer.py
 
 ## Use custom prompt file
