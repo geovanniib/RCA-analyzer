@@ -10,7 +10,7 @@ This document contains a compilation of 15 fictional Root Cause Analysis (RCA) r
 
 All incidents are fictional and created for educational purposes.
 
-------------------------------------------------------------------------------------------
+==========================================================================================
 
 INCIDENT #: NFI-2023-0010
 DATE: October 26, 2023
