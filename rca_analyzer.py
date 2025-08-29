@@ -568,6 +568,8 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
             if line.startswith('#'):
                 header_level = len(line) - len(line.lstrip('#'))
                 header_text = line.lstrip('#').strip()
+                # Format header text (remove ** and make uppercase)
+                header_text = self._format_header_text(header_text)
                 
                 if header_level == 1:
                     story.append(Spacer(1, 20))
@@ -589,35 +591,50 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
                 # Process multi-line numbered items
                 full_text = text
                 i += 1
-                while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\.', lines[i].strip()):
+                while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\.', lines[i].strip()) and not re.match(r'^\*\*', lines[i].strip()):
                     full_text += ' ' + lines[i].strip()
                     i += 1
                 
-                # Format the text
+                # Format the text BEFORE adding number
                 formatted_text = self._format_text_content(full_text)
                 story.append(Paragraph(f"{number}. {formatted_text}", numbered_style))
                 continue
             
             # Handle bullet points (- or *)
-            if line.startswith(('-', '*')):
-                bullet_text = line[1:].strip()
+            bullet_match = re.match(r'^[-*]\s+(.+)', line)
+            if bullet_match:
+                bullet_text = bullet_match.group(1)
                 # Process multi-line bullet items
                 full_text = bullet_text
                 i += 1
-                while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\.', lines[i].strip()):
+                while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\.', lines[i].strip()) and not re.match(r'^\*\*', lines[i].strip()):
                     full_text += ' ' + lines[i].strip()
                     i += 1
                 
-                # Format the text
+                # Format the text BEFORE adding bullet
                 formatted_text = self._format_text_content(full_text)
                 story.append(Paragraph(f"• {formatted_text}", bullet_style))
+                continue
+            
+            # Handle standalone lines that start with **bold** (like section labels)
+            if re.match(r'^\*\*[^*]+?\*\*', line):
+                # This is likely a standalone bold statement
+                paragraph_text = line
+                i += 1
+                # Collect continuation lines but stop at new sections
+                while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\.', lines[i].strip()) and not re.match(r'^\*\*', lines[i].strip()):
+                    paragraph_text += ' ' + lines[i].strip()
+                    i += 1
+                
+                formatted_text = self._format_text_content(paragraph_text)
+                story.append(Paragraph(formatted_text, normal_style))
                 continue
             
             # Handle regular paragraphs
             paragraph_text = line
             i += 1
             # Collect multi-line paragraphs
-            while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\.', lines[i].strip()):
+            while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\.', lines[i].strip()) and not re.match(r'^\*\*', lines[i].strip()):
                 paragraph_text += ' ' + lines[i].strip()
                 i += 1
             
@@ -627,16 +644,40 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
         
         return story
     
+    def _format_header_text(self, text):
+        """Format header text by removing ** and making it uppercase if it was bold."""
+        if not text:
+            return ""
+        
+        # Check if the entire header was meant to be bold
+        if text.startswith('**') and text.endswith('**'):
+            # Remove ** and make uppercase
+            return text[2:-2].upper()
+        
+        # Handle partial bold in headers
+        def bold_and_upper(match):
+            content = match.group(1)
+            return content.upper()
+        
+        text = re.sub(r'\*\*(.*?)\*\*', bold_and_upper, text)
+        
+        return text
+    
     def _format_text_content(self, text):
         """Format text content with bold, italic, and other markdown elements."""
         if not text:
             return ""
         
-        # Convert **bold** to HTML
-        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+        # Convert **bold** to HTML with uppercase - more precise pattern
+        def bold_and_upper(match):
+            content = match.group(1)
+            return f'<b>{content.upper()}</b>'
         
-        # Convert *italic* to HTML (but not ** which is already converted)
-        text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'<i>\1</i>', text)
+        # Use a more precise regex that handles the specific case
+        text = re.sub(r'\*\*([^*]+?)\*\*', bold_and_upper, text)
+        
+        # Convert *italic* to HTML (single asterisks only, not part of **)
+        text = re.sub(r'(?<!\*)\*([^*]+?)\*(?!\*)', r'<i>\1</i>', text)
         
         # Convert `code` to HTML
         text = re.sub(r'`([^`]+)`', r'<font name="Courier"><b>\1</b></font>', text)
@@ -644,6 +685,30 @@ Provide specific, actionable insights based on the data. Use clear formatting wi
         # Handle percentages and numbers to make them stand out
         text = re.sub(r'(\d+%)', r'<b>\1</b>', text)
         text = re.sub(r'(\d+\s+incidents?)', r'<b>\1</b>', text)
+        
+        # Handle section labels that might be in quotes and make them bold+uppercase
+        text = re.sub(r'"([^"]+?)":', r'<b>\1</b>:', text, flags=re.IGNORECASE)
+        
+        # Handle common RCA terms and make them bold+uppercase (but not if already processed)
+        rca_terms = [
+            r'\b(root cause)\b', r'\b(incidents?)\b', r'\b(outages?)\b', 
+            r'\b(failures?)\b', r'\b(errors?)\b', r'\b(alerts?)\b',
+            r'\b(monitoring)\b', r'\b(services?)\b', r'\b(systems?)\b',
+            r'\b(technical)\b', r'\b(process)\b', r'\b(human error)\b',
+            r'\b(infrastructure)\b', r'\b(recommendations?)\b', r'\b(action items?)\b',
+            r'\b(deployment)\b', r'\b(configuration)\b', r'\b(permissions?)\b',
+            r'\b(validation)\b', r'\b(automated?)\b', r'\b(monitoring)\b'
+        ]
+        
+        for term_pattern in rca_terms:
+            # Only apply if not already in bold tags
+            def term_formatter(match):
+                full_match = match.group(0)
+                term = match.group(1)
+                return full_match.replace(term, f'<b>{term.upper()}</b>')
+            
+            # Use negative lookbehind and lookahead to avoid double-processing
+            text = re.sub(f'(?<!<b>){term_pattern}(?!</b>)', term_formatter, text, flags=re.IGNORECASE)
         
         # Clean up any remaining markdown artifacts
         text = text.replace('###', '').replace('##', '').replace('#', '')
