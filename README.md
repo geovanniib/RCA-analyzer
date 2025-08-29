@@ -1,5 +1,5 @@
 # RCA-analyzer
-This repository contains an RCA analyzer that leverages an LLM to identify patterns and suggest infrastructure improvements. If no specific model is provided, it defaults to OpenAI’s GPT-4.
+This repository contains a Root Cause Analysis (RCA) analyzer that leverages an LLM to identify patterns and suggest infrastructure improvements. By default, it uses prompt.txt as the analysis prompt. If no specific model is provided, it defaults to OpenAI’s GPT-4 (gpt-4-turbo-preview).
 
 
 # What this prompt does (prompt.txt)
@@ -59,17 +59,18 @@ python rca_analyzer.py data/Incident_RCA_Summary.pdf --all-formats --output-dir 
 
 ## Use custom options
 Examples:
-  python rca_analyzer.py data/Incident_RCA_Summary.pdf                              # Basic analysis  
-  python rca_analyzer.py data/Incident_RCA_Summary.pdf --pdf                        # Generate PDF report
-  python rca_analyzer.py data/Incident_RCA_Summary.pdf --csv                        # Generate CSV data
-  python rca_analyzer.py data/Incident_RCA_Summary.pdf --all-formats                # Generate all formats
-  python rca_analyzer.py data/Incident_RCA_Summary.pdf --pdf --csv                  # Generate PDF + CSV
-  python rca_analyzer.py --model gpt-4o --pdf                  # Use GPT-4o with PDF
-  python rca_analyzer.py data/Incident_RCA_Summary.pdf --output-dir ./reports       # Save to specific directory
-  python rca_analyzer.py data/Incident_RCA_Summary.pdf --all-formats -d ./output    # All formats to directory
-  python rca_analyzer.py --api-key your-key-here               # Use api-key directly
-  python rca_analyzer.py data/RCA.pdf --prompt prompt.txt --model gpt-4o --output analysis.md # Combine multiple options
-  python rca_analyzer.py data/data.txt --prompt prompt.txt --model gpt-4o --output analysis.md  # files txt input
+  python rca_analyzer.py data/Incident_RCA_Summary.pdf                                              # Basic analysis  
+  python rca_analyzer.py data/Incident_RCA_Summary.pdf --prompt prompt.txt -d ./output              # custom prompt
+  python rca_analyzer.py data/Incident_RCA_Summary.pdf --pdf                                        # Generate PDF report
+  python rca_analyzer.py data/Incident_RCA_Summary.pdf --csv                                        # Generate CSV data
+  python rca_analyzer.py data/Incident_RCA_Summary.pdf --all-formats                                # Generate all formats
+  python rca_analyzer.py data/Incident_RCA_Summary.pdf --pdf --csv                                  # Generate PDF + CSV
+  python rca_analyzer.py data/Incident_RCA_Summary.pdf --model gpt-4o --pdf                         # Use GPT-4o with PDF
+  python rca_analyzer.py data/Incident_RCA_Summary.pdf --output-dir ./reports                       # Save to specific directory
+  python rca_analyzer.py data/Incident_RCA_Summary.pdf --all-formats -d ./output                    # All formats to directory
+  python rca_analyzer.py --api-key your-key-here                                                    # Use api-key directly
+  python rca_analyzer.py data/RCA.pdf --prompt prompt.txt --model gpt-4o --output analysis.md       # Combine multiple options
+  python rca_analyzer.py data/data.txt --prompt prompt.txt --model gpt-4o --output analysis.md      # TXT input
 
 
 ## Deactivate the environment (optional, when finished)
