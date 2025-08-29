@@ -1,5 +1,5 @@
 # RCA-analyzer
-This repository contains an analyzer of RCAs that uses an LLM to identify patterns and suggest improvements in the infrastructure.
+This repository contains an RCA analyzer that leverages an LLM to identify patterns and suggest infrastructure improvements. If no specific model is provided, it defaults to OpenAI’s GPT-4.
 
 
 # Setting Up
